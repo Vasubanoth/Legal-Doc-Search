@@ -273,10 +273,15 @@ for key, val in {
     "messages": [],
     "collection": None,
     "doc_names": [],
-    "groq_api_key": "",
 }.items():
     if key not in st.session_state:
         st.session_state[key] = val
+
+# ── Load API key from Streamlit secrets (set in Streamlit Cloud dashboard) ───
+try:
+    GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+except (KeyError, FileNotFoundError):
+    GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -286,21 +291,10 @@ with st.sidebar:
         <div class="docchat-logo">⚡</div>
         <div>
             <div class="docchat-title">DocChat</div>
-            <div class="docchat-sub">RAG · Groq · ChromaDB</div>
+            <div class="docchat-sub">RAG · Groq · FastEmbed</div>
         </div>
     </div>
     """, unsafe_allow_html=True)
-
-    # API Key
-    api_key_input = st.text_input(
-        "Groq API Key",
-        type="password",
-        value=st.session_state.groq_api_key,
-        placeholder="gsk_...",
-        help="Get a free key at console.groq.com",
-    )
-    if api_key_input:
-        st.session_state.groq_api_key = api_key_input
 
     # Model selector
     model_label = st.selectbox("Model", list(MODELS.keys()), index=0)
@@ -411,8 +405,8 @@ with col_main:
 
     # ── Handle submit ──────────────────────────────────────────────────────
     if submit and user_input.strip():
-        if not st.session_state.groq_api_key:
-            st.error("🔑 Please enter your Groq API key in the sidebar.")
+        if not GROQ_API_KEY:
+            st.error("🔑 GROQ_API_KEY not found. Add it to Streamlit Cloud secrets.")
         elif st.session_state.collection is None:
             st.error("📂 Please upload and process at least one document first.")
         else:
@@ -420,7 +414,7 @@ with col_main:
 
             with st.spinner("Thinking…"):
                 try:
-                    client = get_groq_client(st.session_state.groq_api_key)
+                    client = get_groq_client(GROQ_API_KEY)
                     chunks, metas = retrieve_chunks(st.session_state.collection, user_input.strip())
                     messages = build_prompt(chunks, metas, user_input.strip(), st.session_state.messages[:-1])
 
