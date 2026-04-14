@@ -62,50 +62,49 @@ def estimate_tokens(text: str) -> int:
 
 def build_vector_store(docs: list[dict]):
     """
-    docs = [{"name": filename, "text": full_text}]
-    Returns a ChromaDB collection.
+    Pure-Python vector store using numpy cosine similarity.
+    No ChromaDB, no protobuf, works on any Python version.
+    Returns a dict with embeddings, chunks, and metadata.
     """
-    import chromadb
+    import numpy as np
     embed_model = get_embedding_model()
 
-    client = chromadb.Client()
-    # Always start fresh for this session
-    try:
-        client.delete_collection("rag_docs")
-    except Exception:
-        pass
-    collection = client.create_collection("rag_docs")
-
-    all_chunks, all_ids, all_metas = [], [], []
+    all_chunks, all_metas = [], []
     for doc in docs:
         chunks = chunk_text(doc["text"])
         for idx, chunk in enumerate(chunks):
             all_chunks.append(chunk)
-            all_ids.append(f"{doc['name']}_{idx}")
             all_metas.append({"source": doc["name"], "chunk_idx": idx})
 
     if not all_chunks:
-        return collection
+        return {"embeddings": None, "chunks": [], "metas": []}
 
-    # Embed in batches
     embeddings = list(embed_model.embed(all_chunks))
-    embeddings_list = [e.tolist() for e in embeddings]
+    emb_matrix = np.array(embeddings, dtype=np.float64)
+    # L2-normalise rows for cosine similarity via dot product
+    norms = np.linalg.norm(emb_matrix, axis=1, keepdims=True)
+    norms[norms == 0] = 1
+    emb_matrix = emb_matrix / norms
 
-    collection.add(
-        documents=all_chunks,
-        embeddings=embeddings_list,
-        ids=all_ids,
-        metadatas=all_metas,
-    )
-    return collection
+    return {"embeddings": emb_matrix, "chunks": all_chunks, "metas": all_metas}
 
 
-def retrieve_chunks(collection, query: str, n: int = MAX_CHUNKS):
+def retrieve_chunks(store: dict, query: str, n: int = MAX_CHUNKS):
+    import numpy as np
     embed_model = get_embedding_model()
-    q_emb = list(embed_model.embed([query]))[0].tolist()
-    results = collection.query(query_embeddings=[q_emb], n_results=min(n, collection.count()))
-    chunks = results["documents"][0]
-    metas  = results["metadatas"][0]
+
+    if store["embeddings"] is None:
+        return [], []
+
+    q_emb = np.array(list(embed_model.embed([query]))[0], dtype=np.float64)
+    q_emb = q_emb / (np.linalg.norm(q_emb) or 1)
+
+    scores = store["embeddings"] @ q_emb          # cosine similarity
+    top_n  = int(min(n, len(store["chunks"])))
+    top_idx = scores.argsort()[::-1][:top_n]
+
+    chunks = [store["chunks"][i] for i in top_idx]
+    metas  = [store["metas"][i]  for i in top_idx]
     return chunks, metas
 
 
