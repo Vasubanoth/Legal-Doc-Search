@@ -30,3 +30,5 @@ This project allows users to upload PDF documents, ask questions, and receive an
 
 ---
 * the web Application is live at : "https://8na5qx6dgi2bxi4tj4njzc.streamlit.app/"
+
+## Note : Only works for text based documents 
