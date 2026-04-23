@@ -1,5 +1,6 @@
 import streamlit as st
 import io
+import os
 from pypdf import PdfReader
 from pipeline import build_vector_store, RAGPipeline
 
@@ -7,6 +8,9 @@ st.set_page_config(page_title="Legal RAG", layout="wide")
 
 # Load API key
 GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+
+if "HF_TOKEN" in st.secrets:
+    os.environ["HF_TOKEN"] = st.secrets["HF_TOKEN"]
 
 st.title("📄 Legal Document Assistant")
 st.caption("Ask questions with exact citations")
